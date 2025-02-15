@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- 文本输入框，用于输入URL -->
+    <EditText
+        android:id="@+id/urlInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="输入m3u8 URL" />
+
+    <!-- 第一行：paste 按钮和 解析 按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp">
+
+        <!-- paste 按钮 -->
+        <Button
+            android:id="@+id/pasteButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Paste" />
+
+        <!-- 解析 按钮 -->
+        <Button
+            android:id="@+id/parseButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:text="解析" />
+    </LinearLayout>
+
+    <!-- 下载并合并 按钮 -->
+    <Button
+        android:id="@+id/downloadButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="下载并合并" />
+
+    <!-- 控制台输出 -->
+    <TextView
+        android:id="@+id/consoleText"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="16dp"
+        android:background="@android:color/darker_gray"
+        android:padding="8dp"
+        android:text="控制台输出"
+        android:textColor="@android:color/white" />
+
+    <!-- 第二行：清空控制台 按钮 和 退出 按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp">
+
+        <!-- 清空控制台 按钮 -->
+        <Button
+            android:id="@+id/clearButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="清空控制台" />
+
+        <!-- 退出 按钮 -->
+        <Button
+            android:id="@+id/exitButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:text="退出" />
+    </LinearLayout>
+
+</LinearLayout>
