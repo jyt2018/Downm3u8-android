@@ -1,10 +1,11 @@
 package com.example.downm3u8
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
+import android.annotation.SuppressLint
+import android.content.ContentValues
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
+import android.provider.MediaStore
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -19,8 +20,9 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.io.FileInputStream
+import java.io.OutputStream
 import java.io.FileOutputStream
-import java.io.InputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -28,10 +30,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var downloadButton: Button
     private lateinit var consoleText: TextView
     private lateinit var clearButton: Button
-    private lateinit var pasteButton: Button
+    private lateinit var clearCatchButton: Button
     private lateinit var parseButton: Button
     private lateinit var exitButton: Button
+    private lateinit var mergeButton: Button // 新增合并按钮
+    private lateinit var outNameInput: EditText // 原来是ffmpeg命令后面的参数，后改为输出文件的文件名
 
+    @SuppressLint("MissingInflatedId")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -41,35 +46,67 @@ class MainActivity : AppCompatActivity() {
         downloadButton = findViewById(R.id.downloadButton)
         consoleText = findViewById(R.id.consoleText)
         clearButton = findViewById(R.id.clearButton)
-        pasteButton = findViewById(R.id.pasteButton)
+        clearCatchButton = findViewById(R.id.clearCatchButton)
         parseButton = findViewById(R.id.parseButton)
         exitButton = findViewById(R.id.exitButton)
+        mergeButton = findViewById(R.id.mergeButton) // 初始化合并按钮
+        outNameInput = findViewById(R.id.outNameInput) // 初始化 Ffmpeg 命令输入框
 
-        // 设置按钮点击事件
+
+        // 设置下载TS按钮点击事件,这里的判断有误，应该是判断目录下是否有m3u8文件
         downloadButton.setOnClickListener {
-            val url = urlInput.text.toString()
-            if (url.isNotEmpty()) {
-                downloadAndMergeTs(url)
+            val m3u8File = File(getExternalFilesDir(null), "index.m3u8")
+            if (m3u8File.exists()) {
+                downloadAllTs()
             } else {
-                consoleText.text = "请输入有效的URL"
+                consoleText.text = getString(R.string.con_m3u8NotFound)
             }
         }
 
         clearButton.setOnClickListener {
-            consoleText.text = "控制台输出"
+            consoleText.text = "运行日志"
         }
 
-        pasteButton.setOnClickListener {
-            pasteFromClipboard()
+        clearCatchButton.setOnClickListener {
+            val tempDir = getExternalFilesDir(null)
+            if (tempDir != null) {
+                clearCacheFiles(tempDir)
+            }
         }
 
         // 设置解析按钮点击事件
         parseButton.setOnClickListener {
             val url = urlInput.text.toString()
             if (url.isNotEmpty()) {
+                // 设置 outNameInput 的初始内容为out
+                outNameInput.setText(getString(R.string.DefaultOutName)) //"-y -f concat -safe 0 -i input_file -c copy out.mp4")
+
                 parseM3u8Content(url)
             } else {
                 Toast.makeText(this, "请输入有效的URL", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 设置合并按钮点击事件
+        mergeButton.setOnClickListener {
+            // 从本地文件 index.m3u8 读取 TS 文件 URL 列表
+            val indexFile = File(getExternalFilesDir(null), "index.m3u8")
+            if (!indexFile.exists()) {
+                consoleText.append("\n未找到 index.m3u8 文件，请先解析 M3U8 文件")
+                return@setOnClickListener
+            }
+
+            val tsUrls = indexFile.readLines()
+                .filter { !it.startsWith("#") && it.isNotBlank() }
+
+            if (tsUrls.isNotEmpty()) {
+                // 获取所有 TS 文件
+                val tsFiles = tsUrls.map { File(getExternalFilesDir(null), it.substringAfterLast("/")) }
+                val outName = outNameInput.text.toString() + ".mp4"
+                // 调用 mergeTsFiles 函数
+                mergeTsFiles(tsFiles, File(getExternalFilesDir(null), outName))
+            } else {
+                consoleText.append("\n未找到ts文件链接")
             }
         }
 
@@ -79,25 +116,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 从剪贴板粘贴内容到 EditText。
-     */
-    private fun pasteFromClipboard() {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (clipboard.hasPrimaryClip()) {
-            val clipData: ClipData? = clipboard.primaryClip
-            if (clipData != null && clipData.itemCount > 0) {
-                val textToPaste = clipData.getItemAt(0).text.toString()
-                urlInput.setText("")
-                urlInput.setText(textToPaste)
-                Toast.makeText(this, "已粘贴", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(this, "剪贴板为空", Toast.LENGTH_SHORT).show()
-        }
-    }
+
     /**
      * 解析 M3U8 文件内容，并保存到本地文件 index.m3u8。
      *
@@ -105,9 +124,9 @@ class MainActivity : AppCompatActivity() {
      */
     private fun parseM3u8Content(url: String) {
         CoroutineScope(Dispatchers.Main).launch {
-            consoleText.text = "开始解析url..."
+            consoleText.text = getString(R.string.con_StartParse)
             val m3u8Content = withContext(Dispatchers.IO) {
-                downloadFile(url)
+                downloadM3u8File(url)
             }
 
             if (m3u8Content != null) {
@@ -116,7 +135,7 @@ class MainActivity : AppCompatActivity() {
                 val (finalM3u8Content, finalBaseUrl) = if (secondLayerUrl != null) {
                     consoleText.append("\n检测到第二层 M3U8，开始下载...")
                     val secondLayerContent = withContext(Dispatchers.IO) {
-                        downloadFile(secondLayerUrl)
+                        downloadM3u8File(secondLayerUrl)
                     }
                     if (secondLayerContent != null) {
                         consoleText.append("\n第二层 M3U8 下载成功")
@@ -155,7 +174,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     /**
      * 检查是否需要第二层 M3U8。
      *
@@ -186,6 +204,7 @@ class MainActivity : AppCompatActivity() {
         }
         return null
     }
+
     /**
      * 解析并更新 M3U8 内容。
      *
@@ -214,7 +233,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     else -> "$baseUrl$uri" // 相对路径
                 }
-                updatedLine = line.replace(uri, key!!)
+                updatedLine = line.replace(uri, key)
             }
 
             // 解析 TS 片段
@@ -237,16 +256,13 @@ class MainActivity : AppCompatActivity() {
 
         return Triple(key, tsCount, updatedLines.joinToString("\n"))
     }
+
     /**
-     * 下载并合并 ts 文件。
-     *
-     * @param url M3U8 文件的 URL。
+     * 下载所有 ts 文件，如果已经存在则跳过。
      */
-    private fun downloadAndMergeTs(url: String) {
+    private fun downloadAllTs() {
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                consoleText.text = "开始下载文件..."
-
                 // 从本地文件 index.m3u8 读取 TS 文件 URL 列表
                 val indexFile = File(getExternalFilesDir(null), "index.m3u8")
                 if (!indexFile.exists()) {
@@ -258,39 +274,48 @@ class MainActivity : AppCompatActivity() {
                     .filter { !it.startsWith("#") && it.isNotBlank() }
 
                 if (tsUrls.isNotEmpty()) {
-                    consoleText.append("\ntotal: {${tsUrls.size}}")
+                    consoleText.append("\n视频片段一共: ${tsUrls.size}")
                     consoleText.append("\n开始下载ts文件...")
                     val tsFiles = mutableListOf<File>()
                     for ((index, tsUrl) in tsUrls.withIndex()) {
+                        // 生成目标文件的路径
+                        val fileName = tsUrl.substringAfterLast("/")
+                        val targetFile = File(getExternalFilesDir(null), fileName)
 
-                        val tsFile = downloadTsFile(tsUrl)
-                        if (tsFile != null) {
-                            tsFiles.add(tsFile)
+                        if (targetFile.exists()) {
+                            // 文件已经存在，跳过下载
+                            consoleText.append("\n文件 $fileName 已存在，跳过下载")
+                            tsFiles.add(targetFile)
+                        } else {
+                            // 文件不存在，进行下载
+                            val tsFile = downloadSingleTs(tsUrl)
+                            if (tsFile != null) {
+                                tsFiles.add(tsFile)
+                            }
                         }
-                        Log.d("Ts-down","进度: ${index + 1}/${tsUrls.size} $tsUrl")
+                        consoleText.text = getString(R.string.downAllTs_Progress, index + 1, tsUrls.size)
+                        Log.d("Ts-down", "进度: ${index + 1}/${tsUrls.size} $tsUrl")
                     }
+                    consoleText.text = ""
+                    consoleText.append("\n${tsUrls.size} 个 ts 文件下载完成")
 
-                    consoleText.append("\n开始合并ts文件...")
-                    val outputFile = File(getExternalFilesDir(null), "output.mp4")
-                    mergeTsFiles(tsFiles, outputFile)
-                    consoleText.append("\n合并完成，文件保存在: ${outputFile.absolutePath}")
                 } else {
-                    consoleText.append("\n未找到ts文件链接")
+                    consoleText.append("\n提供的 m3u8 里未找到 ts 文件链接")
                 }
             } catch (e: Exception) {
-                consoleText.text = "发生错误: ${e.message}"
+                consoleText.text = getString(R.string.error_message, e.message)
                 Log.e("MainActivity", "Error: ${e.message}", e)
             }
         }
     }
 
     /**
-     * 下载文件内容。
+     * 下载m3u8文件内容。
      *
      * @param url 文件的 URL。
      * @return 文件内容，如果下载失败则返回 null。
      */
-    private suspend fun downloadFile(url: String): String? {
+    private suspend fun downloadM3u8File(url: String): String? {
         return withContext(Dispatchers.IO) {
             try {
                 val client = OkHttpClient()
@@ -304,14 +329,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val client = OkHttpClient()
     /**
      * 下载 TS 文件。
      *
      * @param url TS 文件的 URL。
      * @return 下载后的文件对象，如果下载失败则返回 null。
      */
-    private val client = OkHttpClient()
-    private suspend fun downloadTsFile(url: String): File? {
+    private suspend fun downloadSingleTs(url: String): File? {
         return withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder().url(url).build()
@@ -340,19 +365,87 @@ class MainActivity : AppCompatActivity() {
     private fun mergeTsFiles(tsFiles: List<File>, outputFile: File) {
         val tsFileList = File(getExternalFilesDir(null), "ts_files.txt")
         tsFileList.writeText(tsFiles.joinToString("\n") { "file '${it.absolutePath}'" })
-//        val command = "-allowed_extensions -ALL  -i ${getExternalFilesDir(null)}/index.m3u8 -acodec copy -vcodec copy -f mp4 ${outputFile.absolutePath}"
-//        val command = "-f concat -i ${tsFileList.absolutePath}  -c copy ${outputFile.absolutePath}"
-        val command = "-f concat -i ts_files.txt  -c copy out.mp4"
-        consoleText.append("\nffmpeg ${command}")
-//        val command = "-f concat -safe 0 -i ${tsFileList.absolutePath} -c copy ${outputFile.absolutePath}"
-        FFmpeg.executeAsync(command) { executionId, returnCode ->
+
+        // 使用 ffmpegInput 中的命令
+        val baseCommand = "-y -f concat -safe 0 -i ${tsFileList.name} -c copy ${outputFile.name}"
+        val command = baseCommand
+            .replace(tsFileList.name, tsFileList.absolutePath)
+            .replace(outputFile.name, outputFile.absolutePath)
+
+        consoleText.append("\nffmpeg $command")
+
+        FFmpeg.executeAsync(command) { _, returnCode ->
             if (returnCode == Config.RETURN_CODE_SUCCESS) {
-                Log.d("Ts-FFmpeg", "合并成功: ${outputFile.absolutePath}")
-//                tsFiles.forEach { it.delete() }
-//                tsFileList.delete()
+                Log.d("Ts-Ffmpeg", "合并成功: ${outputFile.absolutePath}")
+                consoleText.append("\n合并成功: ${outputFile.absolutePath}")
+
+                moveVideoToCameraAlbum(outputFile)
             } else {
-                Log.e("Ts-FFmpeg", "合并失败，返回码: $returnCode")
+                Log.e("Ts-Ffmpeg", "合并失败，返回码: $returnCode")
+                consoleText.append("\n合并失败，返回码: $returnCode")
             }
         }
+    }
+    private fun moveVideoToCameraAlbum(sourceFile: File) {
+        val contentResolver = contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, sourceFile.name)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+        }
+
+        val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+        uri
+            ?.let {
+                try {
+                    val inputStream = FileInputStream(sourceFile)
+                    val outputStream: OutputStream = contentResolver.openOutputStream(it)!!
+                    inputStream
+                        .copyTo(outputStream)
+                    inputStream
+                        .close()
+                    outputStream
+                        .close()
+
+                    // 移动成功后删除源文件
+                    sourceFile
+                        .delete()
+
+                    consoleText
+                        .append("\n视频已移动到相机相册: ${sourceFile.name}")
+                } catch (e: Exception) {
+                    e
+                        .printStackTrace()
+                    consoleText
+                        .append("\n移动视频到相机相册失败: ${e.message}")
+                }
+            }
+    }
+
+    /**
+     * delete ts files , ts_files.txt, index.m3u8。
+     */
+    private fun clearCacheFiles(tempDir: File) {
+
+        val tsFileList = File(tempDir, "ts_files.txt")
+        val indexFile = File(tempDir, "index.m3u8")
+        val tsFiles = tsFileList.readLines()
+            .mapNotNull { line ->
+                // 匹配双引号之间的内容
+                val regex = "\'([^\"]*)\'".toRegex()
+                val matchResult = regex.find(line)
+                matchResult?.groupValues?.getOrNull(1)?.let { File(it) }
+            }
+
+        // 遍历所有已合并的 TS 文件，将它们从存储设备中删除
+        consoleText.append("\n" + "$(tsFiles.count()) ts deleted.")
+
+        tsFiles.forEach { it.delete() }
+        // 删除之前创建的临时文件，避免占用额外的存储空间
+        tsFileList.delete()
+        //del index.m3u8 也可以保留，但是每个电影必须有自己的子目录
+        indexFile.delete()
+        //move video to album
     }
 }

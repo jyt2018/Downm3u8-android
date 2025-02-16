@@ -9,41 +9,75 @@
     <EditText
         android:id="@+id/urlInput"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="输入m3u8 URL" />
+        android:layout_height="79dp"
+        android:autofillHints="url"
+        android:hint="@string/m3u8_url"
+        android:inputType="textUri" />
+
+    <!-- output video name -->
+    <EditText
+        android:id="@+id/outNameInput"
+        android:layout_width="match_parent"
+        android:layout_height="59dp"
+        android:layout_marginTop="8dp"
+        android:hint="@string/outputVideoName"
+        android:inputType="textNoSuggestions" />
 
     <!-- 第一行：paste 按钮和 解析 按钮 -->
     <LinearLayout
+        style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:layout_marginTop="16dp">
 
-        <!-- paste 按钮 -->
+        <!-- clearCache button -->
         <Button
-            android:id="@+id/pasteButton"
+            android:id="@+id/clearCatchButton"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Paste" />
+            android:text="@string/clearCache" />
 
         <!-- 解析 按钮 -->
         <Button
             android:id="@+id/parseButton"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="16dp"
-            android:text="解析" />
+            android:text="@string/parse" />
     </LinearLayout>
 
-    <!-- 下载并合并 按钮 -->
-    <Button
-        android:id="@+id/downloadButton"
+    <!-- 第二行：下载并合并 按钮 和 合并 按钮 -->
+    <LinearLayout
+        style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="下载并合并" />
+        android:orientation="horizontal"
+        android:layout_marginTop="16dp">
+
+        <!-- 下载并合并 按钮 -->
+        <Button
+            android:id="@+id/downloadButton"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/downloadTs" />
+
+        <!-- 合并 按钮 -->
+        <Button
+            android:id="@+id/mergeButton"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:text="@string/merge" />
+    </LinearLayout>
 
     <!-- 控制台输出 -->
     <TextView
@@ -52,13 +86,14 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginTop="16dp"
-        android:background="@android:color/darker_gray"
+        android:background="@android:color/black"
         android:padding="8dp"
-        android:text="控制台输出"
+        android:text="@string/consoleOutput"
         android:textColor="@android:color/white" />
 
-    <!-- 第二行：清空控制台 按钮 和 退出 按钮 -->
+    <!-- 第三行：清空控制台 按钮 和 退出 按钮 -->
     <LinearLayout
+        style="?android:attr/buttonBarStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -67,19 +102,21 @@
         <!-- 清空控制台 按钮 -->
         <Button
             android:id="@+id/clearButton"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="清空控制台" />
+            android:text="@string/clearButton" />
 
         <!-- 退出 按钮 -->
         <Button
             android:id="@+id/exitButton"
+            style="?android:attr/buttonBarButtonStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="16dp"
-            android:text="退出" />
+            android:text="@string/exitApp" />
     </LinearLayout>
 
 </LinearLayout>
